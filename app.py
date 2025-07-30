@@ -383,13 +383,12 @@ LICHEN_DATA = {
 def load_models():
     """Loads and returns the full Keras models and labels."""
     try:
-        # Load EfficientNet model, compiling is not needed for inference
-        effnet_model = tf.keras.models.load_model("true_model_version_1.keras", compile=False)
+        # Load the UPDATED EfficientNet model
+        effnet_model = tf.keras.models.load_model("updated_efficientnet.keras", compile=False)
 
-        # The MobileNetV2 model has a custom Lambda layer, which we handle here
+        # The UPDATED MobileNetV2 model might still need the custom object if re-saving doesn't remove the explicit reference
         mobilenet_model = tf.keras.models.load_model(
-            "true_mobilenetv2_lichen_model_1.keras",
-            custom_objects={"preprocess_input": tf.keras.applications.mobilenet_v2.preprocess_input},
+            "updated_mobilenet.keras",
             compile=False
         )
         
@@ -399,7 +398,7 @@ def load_models():
         return effnet_model, mobilenet_model, labels
     except Exception as e:
         st.error(f"Error loading models: {e}")
-        st.error("Please make sure model files and labels.txt are present and that your requirements.txt specifies tensorflow-cpu==2.15.0")
+        st.error("Please make sure the 'updated_...' model files and labels.txt are present.")
         return None, None, None
 
 effnet_model, mobilenet_model, labels = load_models()
@@ -414,7 +413,6 @@ def predict(image_data):
     img_array = np.array(img_resized, dtype=np.float32)
     img_expanded = np.expand_dims(img_array, axis=0)
     
-    # The models contain their own preprocessing layers, so we feed the raw image data
     effnet_input = img_expanded
     mobilenet_input = img_expanded
     
