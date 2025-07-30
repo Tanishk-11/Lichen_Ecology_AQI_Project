@@ -60,26 +60,46 @@ def preprocess(img_bytes, size=(224,224)):
 @st.cache_resource
 def load_models_and_labels():
     models, labels = [], []
-    for ext in ('*.keras','*.h5'):
+    for ext in ('*.keras', '*.h5'):
         for path in sorted(glob.glob(ext)):
             try:
                 m = tf.keras.models.load_model(path, compile=False)
                 models.append(m)
             except Exception as e:
-                msg = str(e)
-                if 'stem_conv' in msg:
-                    st.warning(f"Skipped {os.path.basename(path)}: expecting RGB input. Re-save model with 3-channel input.")
-                else:
-                    st.warning(f"Skipped {os.path.basename(path)}: could not load model.")
+                st.error(f"Failed to load model '{os.path.basename(path)}': {e}")
+    # Load labels
     try:
         labels = [l.strip() for l in open('labels.txt')]
-    except:
-        st.error('labels.txt missing.')
+    except Exception:
+        st.error('labels.txt missing or unreadable.')
     return models, labels
 
 models, labels = load_models_and_labels()
 
 # --- Prediction ---
+def predict(img_bytes):
+    if not models or not labels:
+        return None
+    x = preprocess(img_bytes)
+    preds = []
+    for m in models:
+        # Adjust input channels dynamically if needed
+        expected = m.input_shape[-1]
+        if x.shape[-1] != expected:
+            # convert channels
+            if expected == 1:
+                x_use = np.mean(x, axis=-1, keepdims=True)
+            else:
+                x_use = np.repeat(x, 3, axis=-1)
+        else:
+            x_use = x
+        preds.append(m.predict(x_use))
+    avg = np.mean(preds, axis=0)
+    idx = int(np.argmax(avg))
+    key = labels[idx].replace(' ', '_')
+    return LICHEN_DATA.get(key)
+
+# --- UI ---
 def predict(img_bytes):
     if not models or not labels:
         return None
