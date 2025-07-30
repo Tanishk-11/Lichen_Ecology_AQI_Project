@@ -1,3 +1,6 @@
+import os
+# Suppress TensorFlow GPU warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import streamlit as st
 import tensorflow as tf
 from PIL import Image
@@ -5,7 +8,9 @@ import numpy as np
 import io
 import base64
 import glob
-import os
+
+# Instruct TensorFlow to only log errors
+tf.get_logger().setLevel('ERROR')
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -26,7 +31,7 @@ def get_base64_of_bin_file(bin_file):
 
 # --- Custom CSS for Styling ---
 def get_custom_css(background_file):
-    bg_image_base64 = get_base64_of_bin_file(background_file) if background_file else None
+    bg_image_base64 = get_base64_of_bin_file(background_file)
     if bg_image_base64:
         background_style = f"background-image: url(\"data:image/png;base64,{bg_image_base64}\");"
     else:
@@ -84,8 +89,7 @@ LICHEN_DATA = {
         'aqi_category': "Very Unhealthy",
         'aqi_range': "201-300",
         'inference': "Health warnings of emergency conditions."
-    },
-    # Add more species entries as needed
+    }
 }
 
 # --- Preprocessing ---
