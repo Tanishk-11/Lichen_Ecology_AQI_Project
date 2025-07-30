@@ -151,13 +151,13 @@ LICHEN_DATA = {
 def load_models():
     """Loads and returns the full Keras models and labels."""
     try:
-        effnet_model = tf.keras.models.load_model("true_model_version_1.keras")
+        effnet_model = tf.keras.models.load_model("./true_model_version_1.keras")
         custom_objects = {"preprocess_input": tf.keras.applications.mobilenet_v2.preprocess_input}
         mobilenet_model = tf.keras.models.load_model(
-            "true_mobilenetv2_lichen_model_1.keras",
+            "./true_mobilenetv2_lichen_model_1.keras",
             custom_objects=custom_objects
         )
-        with open("labels.txt", "r") as f:
+        with open("./labels.txt", "r") as f:
             labels = [line.strip() for line in f.readlines()]
         return effnet_model, mobilenet_model, labels
     except Exception as e:
