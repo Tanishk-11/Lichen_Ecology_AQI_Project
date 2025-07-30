@@ -142,42 +142,57 @@ LICHEN_DATA = {
     }
 }
 
-# --- Model Loading ---
+# --- Model Loading (Using TFLite Interpreter) ---
 @st.cache_resource
 def load_models():
-    """Loads and returns the full Keras models from .h5 files."""
+    """Loads and returns the TFLite interpreters and labels."""
     try:
-        # Load the .h5 models
-        effnet_model = tf.keras.models.load_model("updated_efficientnet.h5", compile=False)
-        mobilenet_model = tf.keras.models.load_model("updated_mobilenet.h5", compile=False)
-        
+        effnet_interpreter = tf.lite.Interpreter(model_path="lichen_efficientnet_b0.tflite")
+        effnet_interpreter.allocate_tensors()
+
+        mobilenet_interpreter = tf.lite.Interpreter(model_path="lichen_mobilenet_v2.tflite")
+        mobilenet_interpreter.allocate_tensors()
+
         with open("labels.txt", "r") as f:
             labels = [line.strip() for line in f.readlines()]
-        
-        return effnet_model, mobilenet_model, labels
+            
+        return effnet_interpreter, mobilenet_interpreter, labels
     except Exception as e:
-        st.error(f"Error loading models: {e}")
-        st.error("Please make sure the 'updated_...h5' model files and labels.txt are present.")
+        st.error(f"Error loading model files: {e}")
+        st.error("Please make sure 'lichen_efficientnet_b0.tflite', 'lichen_mobilenet_v2.tflite', and 'labels.txt' are in the same folder.")
         return None, None, None
 
-effnet_model, mobilenet_model, labels = load_models()
+effnet_interpreter, mobilenet_interpreter, labels = load_models()
 
-# --- Prediction Function ---
+# --- Prediction Function (Using TFLite Interpreter) ---
 def predict(image_data):
-    if effnet_model is None or mobilenet_model is None:
+    if effnet_interpreter is None or mobilenet_interpreter is None:
         return None
-    
+        
     img = Image.open(io.BytesIO(image_data)).convert('RGB')
     img_resized = img.resize((224, 224))
     img_array = np.array(img_resized, dtype=np.float32)
     img_expanded = np.expand_dims(img_array, axis=0)
     
-    effnet_input = img_expanded
-    mobilenet_input = img_expanded
+    # Preprocessing for each model
+    effnet_input = img_expanded / 255.0  # Normalize to [0, 1]
+    mobilenet_input = (img_expanded - 127.5) / 127.5  # Normalize to [-1, 1]
+
+    # EfficientNet Inference
+    effnet_input_details = effnet_interpreter.get_input_details()
+    effnet_output_details = effnet_interpreter.get_output_details()
+    effnet_interpreter.set_tensor(effnet_input_details[0]['index'], effnet_input)
+    effnet_interpreter.invoke()
+    effnet_preds = effnet_interpreter.get_tensor(effnet_output_details[0]['index'])
+
+    # MobileNetV2 Inference
+    mobilenet_input_details = mobilenet_interpreter.get_input_details()
+    mobilenet_output_details = mobilenet_interpreter.get_output_details()
+    mobilenet_interpreter.set_tensor(mobilenet_input_details[0]['index'], mobilenet_input)
+    mobilenet_interpreter.invoke()
+    mobilenet_preds = mobilenet_interpreter.get_tensor(mobilenet_output_details[0]['index'])
     
-    effnet_preds = effnet_model.predict(effnet_input)
-    mobilenet_preds = mobilenet_model.predict(mobilenet_input)
-    
+    # Ensemble the results
     ensemble_preds = (effnet_preds + mobilenet_preds) / 2.0
     predicted_index = np.argmax(ensemble_preds)
     predicted_label_from_file = labels[predicted_index]
