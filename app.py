@@ -19,8 +19,7 @@ st.set_page_config(page_title="Lichen Air Quality Indicator", layout="wide")
 @st.cache_data
 def get_base64(bin_file):
     try:
-        data = open(bin_file, 'rb').read()
-        return base64.b64encode(data).decode()
+        return base64.b64encode(open(bin_file, 'rb').read()).decode()
     except:
         return None
 
@@ -30,12 +29,12 @@ def inject_css(bg_file):
     st.markdown(f"""
     <style>
       .stApp {{ background: {bg} center/cover no-repeat fixed; }}
-      header, footer {{visibility: hidden;}}
-      .block-container {{background: rgba(0,0,0,0.6); border-radius: 20px; padding: 2rem;}}
-      .main-title {{font-family: Montserrat; font-size: 3rem; color: #fff; text-align: center;}}
-      .subtitle {{font-family: Roboto; color: #ddd; text-align: center;}}
-      .result-card {{background: rgba(0,0,0,0.7); border-radius: 15px; padding: 20px; margin-top: 1rem;}}
-      .result-card h2 {{color: #4caf50;}}
+      header, footer {{ visibility: hidden; }}
+      .block-container {{ background: rgba(0,0,0,0.6); border-radius: 20px; padding: 2rem; }}
+      .main-title {{ font-family: Montserrat; font-size: 3rem; color: #fff; text-align: center; }}
+      .subtitle {{ font-family: Roboto; color: #ddd; text-align: center; }}
+      .result-card {{ background: rgba(0,0,0,0.7); border-radius: 15px; padding: 20px; margin-top: 1rem; }}
+      .result-card h2 {{ color: #4caf50; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -54,20 +53,28 @@ LICHEN_DATA = {
 def preprocess(img_bytes, size=(224,224)):
     img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
     img = img.resize(size)
-    return np.expand_dims(np.array(img)/255.0, 0)
+    return np.expand_dims(np.array(img) / 255.0, 0)
 
 # --- Load Models & Labels ---
 @st.cache_resource
 def load_models_and_labels():
     models, labels = [], []
-    for ext in ('*.keras', '*.h5'):
-        for path in sorted(glob.glob(ext)):
-            try:
-                m = tf.keras.models.load_model(path, compile=False)
-                models.append(m)
-            except Exception as e:
-                st.error(f"Failed to load model '{os.path.basename(path)}': {e}")
-    # Load labels
+    custom_objects = {
+        'RandomFlip': tf.keras.layers.RandomFlip,
+        'RandomRotation': tf.keras.layers.RandomRotation,
+        'RandomZoom': tf.keras.layers.RandomZoom,
+        'RandomContrast': tf.keras.layers.RandomContrast
+    }
+    # load all Keras files
+    files = sorted(glob.glob('*.keras')) + sorted(glob.glob('*.h5'))
+    st.info(f"Found model files: {files}")
+    for path in files:
+        try:
+            m = tf.keras.models.load_model(path, compile=False, custom_objects=custom_objects)
+            models.append(m)
+        except Exception as e:
+            st.error(f"Error loading '{os.path.basename(path)}': {e}")
+    # load labels
     try:
         labels = [l.strip() for l in open('labels.txt')]
     except Exception:
@@ -76,17 +83,16 @@ def load_models_and_labels():
 
 models, labels = load_models_and_labels()
 
-# --- Prediction ---
+# --- Prediction Function ---
 def predict(img_bytes):
     if not models or not labels:
         return None
     x = preprocess(img_bytes)
     preds = []
     for m in models:
-        # Adjust input channels dynamically if needed
+        # ensure channel match
         expected = m.input_shape[-1]
         if x.shape[-1] != expected:
-            # convert channels
             if expected == 1:
                 x_use = np.mean(x, axis=-1, keepdims=True)
             else:
@@ -100,26 +106,16 @@ def predict(img_bytes):
     return LICHEN_DATA.get(key)
 
 # --- UI ---
-def predict(img_bytes):
-    if not models or not labels:
-        return None
-    x = preprocess(img_bytes)
-    preds = [m.predict(x) for m in models]
-    avg = np.mean(preds, 0)
-    idx = int(np.argmax(avg))
-    key = labels[idx].replace(' ','_')
-    return LICHEN_DATA.get(key)
-
-# --- UI ---
 st.markdown('<h1 class="main-title">Lichen Air Quality Indicator</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Upload a lichen photo to assess air quality.</p>', unsafe_allow_html=True)
 st.markdown('---')
 
-file = st.file_uploader('', type=['jpg','png','jpeg'])
+file = st.file_uploader('', type=['jpg', 'png', 'jpeg'])
 if file:
     img_bytes = file.getvalue()
-    c1,c2 = st.columns([1,2])
-    with c1: st.image(img_bytes, use_container_width=True)
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        st.image(img_bytes, use_container_width=True)
     with c2:
         info = predict(img_bytes)
         if info:
