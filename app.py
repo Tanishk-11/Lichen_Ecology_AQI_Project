@@ -1,5 +1,6 @@
 import streamlit as st
-import tensorflow as tf
+# The tflite_runtime is a smaller, more stable library for inference
+import tflite_runtime.interpreter as tflite
 from PIL import Image
 import numpy as np
 import io
@@ -15,18 +16,21 @@ st.set_page_config(
 # --- Background Image Function ---
 @st.cache_data
 def get_base64_of_bin_file(bin_file):
-    with open(bin_file, 'rb') as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
+    try:
+        with open(bin_file, 'rb') as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except FileNotFoundError:
+        return None
 
 # --- Custom CSS for Styling ---
 def get_custom_css(background_file):
-    try:
-        bg_image_base64 = get_base64_of_bin_file(background_file)
+    bg_image_base64 = get_base64_of_bin_file(background_file) if background_file else None
+    if bg_image_base64:
         background_style = f"""
             background-image: url("data:image/png;base64,{bg_image_base64}");
         """
-    except FileNotFoundError:
+    else:
         st.warning("`background.png` not found. Using a default dark background.")
         background_style = "background-color: #1a1a1a;"
 
@@ -147,10 +151,10 @@ LICHEN_DATA = {
 def load_models():
     """Loads and returns the TFLite interpreters and labels."""
     try:
-        effnet_interpreter = tf.lite.Interpreter(model_path="lichen_efficientnet_b0.tflite")
+        effnet_interpreter = tflite.Interpreter(model_path="lichen_efficientnet_b0.tflite")
         effnet_interpreter.allocate_tensors()
 
-        mobilenet_interpreter = tf.lite.Interpreter(model_path="lichen_mobilenet_v2.tflite")
+        mobilenet_interpreter = tflite.Interpreter(model_path="lichen_mobilenet_v2.tflite")
         mobilenet_interpreter.allocate_tensors()
 
         with open("labels.txt", "r") as f:
