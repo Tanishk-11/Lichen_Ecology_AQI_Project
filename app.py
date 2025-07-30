@@ -241,23 +241,24 @@ import numpy as np
 import io
 import base64
 
-# Import specific preprocessing functions
-from tensorflow.keras.applications.efficientnet import preprocess_input as efficientnet_preprocess_input_func
-from tensorflow.keras.applications.mobilenet_v2 import preprocess_input as mobilenet_preprocess_input_func
+# Import original preprocessing functions (do not rename them for this fix)
+from tensorflow.keras.applications.efficientnet import preprocess_input as efficientnet_preprocess_input
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input as mobilenet_preprocess_input_original
 
-# --- Define Custom Preprocessing Layer (MUST be defined for loading models) ---
-# This class needs to be available when loading models that used it.
-# It wraps the MobileNetV2 preprocessing function to be a Keras Layer.
-class MobileNetV2PreprocessingLayer(tf.keras.layers.Layer):
-    def __init__(self, **kwargs):
-        super(MobileNetV2PreprocessingLayer, self).__init__(**kwargs)
 
-    def call(self, inputs):
-        return mobilenet_preprocess_input_func(inputs)
+# --- REGISTER THE PREPROCESSING FUNCTION FOR MOBILENETV2 (CRITICAL FIX) ---
+# This is the key change to make the Lambda layer serializable.
+# We create a new function that simply calls the original preprocess_input,
+# but we decorate it to make it discoverable by Keras during loading.
+@tf.keras.saving.register_keras_serializable(package="MyCustomLayers") # Give it a package name for uniqueness
+def mobilenet_preprocess_for_lambda_load(inputs):
+    return mobilenet_preprocess_input_original(inputs)
 
-    def get_config(self):
-        return super(MobileNetV2PreprocessingLayer, self).get_config()
-# --- End of Custom Layer Definition ---
+# Now, if your MobileNetV2 model was saved with a Lambda layer named 'mobilenet_preprocessing'
+# and that Lambda layer refers to 'preprocess_input', you need to map it.
+# The error message shows the Lambda layer's config has `function: {'module': 'builtins', 'class_name': 'function', 'config': 'preprocess_input'}`.
+# This implies the Lambda layer explicitly tried to save `preprocess_input` by its raw name.
+# So, we need to make sure when Keras tries to load `preprocess_input` (the function), it gets our registered one.
 
 
 # --- Page Configuration ---
@@ -346,7 +347,6 @@ st.markdown(get_custom_css("background.png"), unsafe_allow_html=True)
 
 
 # --- Lichen Information Map (UPDATED) ---
-# Rephrased the 'inference' text to be a direct conclusion about the environment.
 LICHEN_DATA = {
     'Usnea_filipendula': {
         'common_name': 'Fishbone Beard Lichen', 'tolerance': 'Very Sensitive', 'aqi_range': '0 - 50',
@@ -409,9 +409,20 @@ def load_models():
     mobilenet_model = None
     labels = []
 
+    # Prepare custom_objects for MobileNetV2 loading:
+    # If the model was saved with a Lambda layer wrapping `preprocess_input` function,
+    # we need to provide a mapping from the function's expected name to our registered one.
+    # The error config shows it expects 'preprocess_input' from 'builtins.function'.
+    # So, we register `mobilenet_preprocess_for_lambda_load` with that name (or just its base name).
+    mobilenet_custom_objects = {
+        'mobilenet_preprocessing': mobilenet_preprocess_for_lambda_load, # If Lambda layer was named this
+        'preprocess_input': mobilenet_preprocess_for_lambda_load # If Lambda layer function field just stored 'preprocess_input'
+    }
+
     try:
         effnet_model = tf.keras.models.load_model(
             "true_model_version_1.keras",
+            # Assuming no custom layers in EfficientNet model that need explicit definition
             compile=False # Important for faster loading in Streamlit
         )
     except Exception as e:
@@ -421,12 +432,12 @@ def load_models():
     try:
         mobilenet_model = tf.keras.models.load_model(
             "true_mobilenetv2_lichen_model_1.keras",
-            custom_objects={'MobileNetV2PreprocessingLayer': MobileNetV2PreprocessingLayer}, # Correct custom_objects
+            custom_objects=mobilenet_custom_objects, # Correct custom_objects for Lambda layer
             compile=False # Important for faster loading in Streamlit
         )
     except Exception as e:
         st.error(f"Error loading MobileNetV2 model ('true_mobilenetv2_lichen_model_1.keras'): {e}")
-        st.error("Please ensure the model file exists and is compatible, and `MobileNetV2PreprocessingLayer` is correctly defined.")
+        st.error("Please ensure the model file exists and is compatible, and its custom Lambda layer function is registered.")
 
     try:
         with open("labels.txt", "r") as f:
@@ -438,7 +449,7 @@ def load_models():
 
     if effnet_model is None or mobilenet_model is None or not labels:
         st.error("Failed to load all necessary models or labels. Please check the console for details and file paths.")
-        return None, None, None # Return None if loading fails
+        st.stop() # Stop the app if critical files are missing
 
     return effnet_model, mobilenet_model, labels
 
@@ -459,19 +470,16 @@ def predict(image_data):
     img_expanded = np.expand_dims(img_array, axis=0)
 
     # Preprocessing for EfficientNetB0:
-    # Based on previous discussions, your EfficientNetB0 model most likely
-    # includes a Rescaling(1./255) layer internally (scaling to [0,1]).
-    # We will also apply its standard `preprocess_input` here for robustness,
-    # as some issues might arise if the internal layer doesn't perfectly match
-    # the expectation of the base EfficientNet model's weights.
-    # Applying it externally is safer against potential version/loading quirks.
-    effnet_processed_input = efficientnet_preprocess_input_func(img_expanded) # Apply EfficientNet's standard preprocessing
+    # Apply EfficientNet's standard preprocessing explicitly here.
+    # This scales [0, 255] input to [-1, 1]. This helps if the saved EfficientNet model
+    # implicitly expects this range or if its internal Rescaling(1./255) is problematic.
+    # This is a safe guard against the 'stem_conv' input shape/range error.
+    effnet_processed_input = efficientnet_preprocess_input(img_expanded)
 
     # Preprocessing for MobileNetV2:
-    # Our MobileNetV2 model ('true_mobilenetv2_lichen_model_1.keras') was built with
-    # `MobileNetV2PreprocessingLayer` *inside* it, which scales to [-1, 1].
-    # So, we pass the original [0, 255] image array directly to it.
-    mobilenet_input = img_expanded # MobileNetV2 model handles its own preprocessing from [0,255]
+    # The MobileNetV2 model *already* has the Lambda layer (which calls mobilenet_preprocess_input_original) inside it.
+    # So, we pass the original [0, 255] image array directly to it. The model's graph handles the scaling.
+    mobilenet_input = img_expanded
 
     effnet_preds = effnet_model.predict(effnet_processed_input)
     mobilenet_preds = mobilenet_model.predict(mobilenet_input)
