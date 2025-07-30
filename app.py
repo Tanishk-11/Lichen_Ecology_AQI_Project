@@ -383,14 +383,8 @@ LICHEN_DATA = {
 def load_models():
     """Loads and returns the full Keras models and labels."""
     try:
-        # Load the UPDATED EfficientNet model
         effnet_model = tf.keras.models.load_model("updated_efficientnet.keras", compile=False)
-
-        # The UPDATED MobileNetV2 model might still need the custom object if re-saving doesn't remove the explicit reference
-        mobilenet_model = tf.keras.models.load_model(
-            "updated_mobilenet.keras",
-            compile=False
-        )
+        mobilenet_model = tf.keras.models.load_model("updated_mobilenet.keras", compile=False)
         
         with open("labels.txt", "r") as f:
             labels = [line.strip() for line in f.readlines()]
@@ -408,7 +402,9 @@ def predict(image_data):
     if effnet_model is None or mobilenet_model is None:
         return None
     
+    # FIX: Ensure the image is converted to 3-channel RGB format to prevent the error.
     img = Image.open(io.BytesIO(image_data)).convert('RGB')
+    
     img_resized = img.resize((224, 224))
     img_array = np.array(img_resized, dtype=np.float32)
     img_expanded = np.expand_dims(img_array, axis=0)
