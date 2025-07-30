@@ -145,17 +145,23 @@ LICHEN_DATA = {
     }
 }
 
+def preprocess_image(image_bytes, target_size=(224, 224)):
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    img = img.resize(target_size)
+    arr = np.array(img, dtype=np.float32) / 255.0
+    return np.expand_dims(arr, axis=0)
 
 # --- Model Loading ---
 @st.cache_resource
 def load_models():
     """Loads and returns the full Keras models and labels."""
     try:
-        effnet_model = tf.keras.models.load_model("./true_model_version_1.keras")
+        effnet_model = tf.keras.models.load_model("./true_model_version_1.keras",compile=False)
         custom_objects = {"preprocess_input": tf.keras.applications.mobilenet_v2.preprocess_input}
         mobilenet_model = tf.keras.models.load_model(
             "./true_mobilenetv2_lichen_model_1.keras",
-            custom_objects=custom_objects
+            custom_objects=custom_objects,
+            compile=False
         )
         with open("./labels.txt", "r") as f:
             labels = [line.strip() for line in f.readlines()]
@@ -174,7 +180,7 @@ def predict(image_data):
         return None
     img = Image.open(io.BytesIO(image_data)).convert('RGB')
     img_resized = img.resize((224, 224))
-    img_array = np.array(img_resized, dtype=np.float32)
+    img_array = preprocess_image(image_data)
     img_expanded = np.expand_dims(img_array, axis=0)
     effnet_input = img_expanded
     mobilenet_input = img_expanded
