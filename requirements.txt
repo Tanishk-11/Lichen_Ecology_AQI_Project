@@ -4,7 +4,7 @@
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 
-# ML and data handling
-tensorflow-cpu==2.15.0
+# ML and data handling - Versions from your working environment
+tensorflow==2.19.0
 numpy==1.26.4
-Pillow==10.3.0
+Pillow==11.2.1

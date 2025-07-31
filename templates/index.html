@@ -26,12 +26,22 @@
                 <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-full transition duration-300">Analyze</button>
             </form>
 
-            {% if prediction %}
-            <div class="mt-8 p-6 bg-gray-800 bg-opacity-70 rounded-xl shadow-md">
-                <h2 class="text-2xl font-bold text-green-300 mb-2">{{ prediction.common_name }}</h2>
-                <p><strong>Tolerance to Air Pollution:</strong> {{ prediction.tolerance }}</p>
-                <p><strong>Air Quality (AQI) Indicated:</strong> {{ prediction.aqi_category }} (Estimated Range: {{ prediction.aqi_range }})</p>
-                <p class="mt-4"><strong>What This Lichen's Presence Suggests:</strong> {{ prediction.inference }}</p>
+            <!-- This block will now display both the image and the prediction results -->
+            {% if prediction and image_base64 %}
+            <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                <!-- Image Column -->
+                <div class="bg-gray-800 bg-opacity-70 rounded-xl shadow-md p-4">
+                    <h2 class="text-2xl font-bold text-green-300 mb-4 text-center">Your Uploaded Lichen</h2>
+                    <img src="data:image/jpeg;base64,{{ image_base64 }}" alt="Uploaded Lichen" class="rounded-lg w-full h-auto">
+                </div>
+
+                <!-- Results Column -->
+                <div class="bg-gray-800 bg-opacity-70 rounded-xl shadow-md p-6">
+                    <h2 class="text-2xl font-bold text-green-300 mb-2">{{ prediction.common_name }}</h2>
+                    <p><strong>Tolerance to Air Pollution:</strong> {{ prediction.tolerance }}</p>
+                    <p><strong>Air Quality (AQI) Indicated:</strong> {{ prediction.aqi_category }} (Estimated Range: {{ prediction.aqi_range }})</p>
+                    <p class="mt-4"><strong>What This Lichen's Presence Suggests:</strong> {{ prediction.inference }}</p>
+                </div>
             </div>
             {% endif %}
         </div>
