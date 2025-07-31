@@ -1,4 +1,10 @@
-streamlit==1.36.0
+# requirements.txt
+
+# Web framework and server
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+# ML and data handling
 tensorflow-cpu==2.15.0
 numpy==1.26.4
 Pillow==10.3.0
