@@ -2,6 +2,7 @@
 import io
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -21,7 +22,11 @@ templates = Jinja2Templates(directory="templates")
 # Load both models for the ensemble
 try:
     model1 = tf.keras.models.load_model('true_model_version_1.keras')
-    model2 = tf.keras.models.load_model('true_mobilenetv2_lichen_model_1.keras')
+    # Load the MobileNetV2 model with the custom preprocess_input object
+    model2 = tf.keras.models.load_model(
+        'true_mobilenetv2_lichen_model_1.keras',
+        custom_objects={'preprocess_input': preprocess_input}
+    )
     with open("labels.txt", "r") as f:
         labels = [line.strip() for line in f.readlines()]
 except Exception as e:
@@ -93,7 +98,8 @@ def predict(image_data):
         image_array = np.expand_dims(image_array, axis=0)
 
         if model1 and model2:
-            # Get predictions from both models
+            # Get predictions from both models.
+            # model2 will handle its own preprocessing since it's part of the loaded model.
             predictions1 = model1.predict(image_array)
             predictions2 = model2.predict(image_array)
             
@@ -117,4 +123,4 @@ async def read_root(request: Request):
 async def predict_image(request: Request, file: UploadFile = File(...)):
     image_data = await file.read()
     prediction_info = predict(image_data)
-    return templates.TemplateResponse("index.html", {"request": request, "prediction": prediction_info})
+    return templates.TemplateResponse("request": request, "prediction": prediction_info})
